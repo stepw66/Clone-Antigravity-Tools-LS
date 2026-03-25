@@ -1,7 +1,14 @@
 import axios from 'axios';
 
-// 动态识别 Tauri 生产网络环境（无 Proxy），强制直开底层 5173
-const isTauri = typeof window !== 'undefined' && (!!window.__TAURI__ || window.location.protocol === 'tauri:');
+// 动态识别 Tauri 生产环境：支持 v1 (tauri:) 和 v2 (tauri.localhost)
+const isTauri = typeof window !== 'undefined' && (
+  !!window.__TAURI__ || 
+  window.location.protocol === 'tauri:' || 
+  window.location.hostname === 'tauri.localhost' ||
+  window.location.host === 'tauri.localhost'
+);
+
+// 生产环境下强制直连 Axum (127.0.0.1:5173)，开发环境下使用 Vite Proxy (/v1)
 const baseURL = isTauri ? 'http://127.0.0.1:5173/v1' : '/v1';
 
 const apiClient = axios.create({

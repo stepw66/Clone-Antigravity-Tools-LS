@@ -15,20 +15,37 @@ import { useTranslation } from 'react-i18next';
 import { TriangleAlert, History } from 'lucide-react';
 import { clsx } from 'clsx';
 
-// 为不同模型定义 Matrix 配色
-const MODEL_COLORS = {
-  gemini: '#3b82f6', // 蓝
-  claude: '#f59e0b', // 琥珀
-  gpt: '#10b981',    // 绿
-  default: '#64748b' // 灰
+// 为不同模型品牌定义丰富的 Matrix 调色盘 (引入更高对比度的临近色)
+const MODEL_PALETTES = {
+  // 蓝色系 -> 混合 靛蓝(Indigo)、青色(Cyan)、紫色(Violet) 提高区分度
+  gemini: ['#3b82f6', '#8b5cf6', '#06b6d4', '#6366f1', '#0ea5e9', '#a855f7'], 
+  // 琥珀/橙色系 -> 混合 玫瑰红(Rose)、深橙(Orange)
+  claude: ['#f59e0b', '#f43f5e', '#f97316', '#fbbf24', '#fb7185', '#ea580c'], 
+  // 绿色系 -> 混合 柠檬绿(Lime)、蓝绿(Teal)
+  gpt:    ['#10b981', '#84cc16', '#0d9488', '#22c55e', '#65a30d', '#14b8a6'],
+  default: ['#64748b', '#94a3b8', '#475569', '#cbd5e1']
+};
+
+// 简单的确定性哈希，确保同一个模型名称始终获得同一个颜色
+const getHash = (str) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return Math.abs(hash);
 };
 
 const getModelColor = (name = "") => {
   const n = name.toLowerCase();
-  if (n.includes('gemini')) return MODEL_COLORS.gemini;
-  if (n.includes('claude')) return MODEL_COLORS.claude;
-  if (n.includes('gpt')) return MODEL_COLORS.gpt;
-  return MODEL_COLORS.default;
+  let palette = MODEL_PALETTES.default;
+  
+  if (n.includes('gemini')) palette = MODEL_PALETTES.gemini;
+  else if (n.includes('claude')) palette = MODEL_PALETTES.claude;
+  else if (n.includes('gpt')) palette = MODEL_PALETTES.gpt;
+  
+  // 根据名称哈希从调色盘中选择颜色
+  const hash = getHash(name);
+  return palette[hash % palette.length];
 };
 
 // 1. Traffic Stream Area Chart
