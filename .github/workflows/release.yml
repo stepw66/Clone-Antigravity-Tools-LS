@@ -80,20 +80,27 @@ jobs:
             ARCH="default"
           fi
           
-          echo "Renaming artifacts with arch: $ARCH and version: ${{ github.ref_name }}"
+          echo "Renaming artifacts for ARCH: $ARCH and VER: ${{ github.ref_name }}"
           mkdir -p artifacts-out
           
-          # 查找并重命名 macos 产物，增加版本和架构后缀
-          find target -name "*.dmg" -exec cp {} artifacts-out/Antigravity-Tools-LS_${{ github.ref_name }}_${ARCH}.dmg \; || true
-          find target -name "*.app.tar.gz" -exec cp {} artifacts-out/Antigravity-Tools-LS_${{ github.ref_name }}_${ARCH}.app.tar.gz \; || true
-          find target -name "*.app.tar.gz.sig" -exec cp {} artifacts-out/Antigravity-Tools-LS_${{ github.ref_name }}_${ARCH}.app.tar.gz.sig \; || true
+          VER_CLEAN=${{ github.ref_name }}
+          VER_CLEAN=${VER_CLEAN#v}
           
-          # Windows/Linux 保持原样（它们自带版本号）
-          find target -name "*.exe" -exec cp {} artifacts-out/ \; || true
-          find target -name "*.AppImage" -exec cp {} artifacts-out/ \; || true
-          find target -name "*.AppImage.sig" -exec cp {} artifacts-out/ \; || true
+          # 仅从 bundle 目录提取，杜绝抓取 target 下的 83 个无关二进制文件
+          # macOS: 安装包对齐 Cask，更新包对齐 updater.json 契约 (不带 v 版本号前缀)
+          find target -path "*/bundle/macos/*.dmg" -exec cp {} artifacts-out/Antigravity.Tools_${VER_CLEAN}_${ARCH}.dmg \; || true
+          find target -path "*/bundle/macos/*.app.tar.gz" -exec cp {} artifacts-out/Antigravity.Tools_${ARCH}.app.tar.gz \; || true
+          find target -path "*/bundle/macos/*.app.tar.gz.sig" -exec cp {} artifacts-out/Antigravity.Tools_${ARCH}.app.tar.gz.sig \; || true
           
-          echo "Current artifacts prepared:"
+          # Windows: 严格匹配 Antigravity.Tools_${VER}_x64-setup.exe
+          find target -path "*/bundle/nsis/*.exe" -exec cp {} artifacts-out/Antigravity.Tools_${VER_CLEAN}_x64-setup.exe \; || true
+          
+          # Linux: 对齐 amd64/aarch64 架构标记
+          if [[ "$ARCH" == "x64" ]]; then L_ARCH="amd64"; else L_ARCH="$ARCH"; fi
+          find target -path "*/bundle/appimage/*.AppImage" -exec cp {} artifacts-out/Antigravity.Tools_${VER_CLEAN}_${L_ARCH}.AppImage \; || true
+          find target -path "*/bundle/appimage/*.AppImage.sig" -exec cp {} artifacts-out/Antigravity.Tools_${VER_CLEAN}_${L_ARCH}.AppImage.sig \; || true
+          
+          echo "Final cleaned artifacts listing:"
           ls -R artifacts-out/
 
       - name: Upload Artifacts
