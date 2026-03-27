@@ -193,15 +193,23 @@ pub async fn refresh_quota_internal(
                     }
                 }
 
-                // 2. 提取订阅类型 (复刻 Manager 精准逻辑)
-                let mut tier = data.paid_tier.as_ref().and_then(|t| t.get("name").or_else(|| t.get("id"))).and_then(|v| v.as_str()).map(|s| s.to_string());
-                
-                let is_ineligible = data.ineligible_tiers.as_ref().map_or(false, |v| !v.is_empty());
+                // 2. 提取订阅类型 (修复 Issue #13: 优先检查已有等级，不轻易标记为受限)
+                let mut tier = data.paid_tier.as_ref()
+                    .and_then(|t| t.get("name").or_else(|| t.get("id")))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
 
                 if tier.is_none() {
-                    if !is_ineligible {
-                        tier = data.current_tier.as_ref().and_then(|t| t.get("name").or_else(|| t.get("id"))).and_then(|v| v.as_str()).map(|s| s.to_string());
-                    } else if let Some(allowed) = data.allowed_tiers {
+                    tier = data.current_tier.as_ref()
+                        .and_then(|t| t.get("name").or_else(|| t.get("id")))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                }
+
+                let is_ineligible = data.ineligible_tiers.as_ref().map_or(false, |v| !v.is_empty());
+
+                if tier.is_none() && is_ineligible {
+                    if let Some(allowed) = data.allowed_tiers {
                         if let Some(default_tier) = allowed.iter().find(|t| t.get("isDefault") == Some(&serde_json::json!(true))) {
                             let name = default_tier.get("name").or_else(|| default_tier.get("id")).and_then(|v| v.as_str()).unwrap_or("FREE");
                             tier = Some(format!("{} (受限)", name));
@@ -225,19 +233,51 @@ pub async fn refresh_quota_internal(
                 
                 if let Some(ref t) = subscription_tier {
                     tracing::info!("🎯 成功识别订阅等级: {}", t);
+                    
+                    // 🚀 修复 Issue #13: 即使等级受限 (受限)，只要不是明确的 403 Banned，就不自动禁用代理，且保持活跃
                     if t.contains("(受限)") {
                         if let Some(ref aid) = account_id_opt {
-                            tracing::warn!("⚠️ 账号 {} 订阅等级受限，自动切换至禁用（绕过）状态: {:?}", aid, load_forbidden_reason);
-                            let _ = state.account_manager.update_proxy_disabled(aid, true).await;
-                            let _ = state.account_tx.send("forbidden".to_string());
-                            
-                            // 🚀 核心修复：如果是受限模式，立即将详细原因持久化，防止前端显示“无”
-                            if let Some(reason) = load_forbidden_reason {
-                                let _ = state.account_manager.mark_account_as_forbidden(aid, &reason, load_appeal_url).await;
+                            let is_real_ban = load_forbidden_reason.as_ref().map(|r| {
+                                let r_low = r.to_lowercase();
+                                r_low.contains("banned") || r_low.contains("disabled") || r_low.contains("terms of service")
+                            }).unwrap_or(false);
+
+                            if is_real_ban {
+                                tracing::warn!("🚫 账号 {} 确认为封禁/严重违规，自动切换至禁用状态: {:?}", aid, load_forbidden_reason);
+                                let _ = state.account_manager.update_proxy_disabled(aid, true).await;
+                                let _ = state.account_tx.send("forbidden".to_string());
+                                if let Some(reason) = load_forbidden_reason {
+                                    let _ = state.account_manager.mark_account_as_forbidden(aid, &reason, load_appeal_url).await;
+                                }
+                            } else {
+                                tracing::info!("ℹ️ 账号 {} 等级受限但确认为活跃节点，跳过自动禁用逻辑", aid);
+                                if let Ok(Some(mut account)) = state.account_manager.get_account(aid).await {
+                                    let mut changed = false;
+                                    
+                                    // 🚀 核心恢复：如果之前被误判为 Forbidden，现在纠正回 Active
+                                    if account.status == ls_accounts::AccountStatus::Forbidden {
+                                        account.status = ls_accounts::AccountStatus::Active;
+                                        account.is_proxy_disabled = false;
+                                        changed = true;
+                                    }
+                                    
+                                    if let Some(reason) = load_forbidden_reason {
+                                        if account.disabled_reason.as_ref() != Some(&reason) {
+                                            account.disabled_reason = Some(reason);
+                                            changed = true;
+                                        }
+                                    }
+                                    
+                                    if changed {
+                                        let _ = state.account_manager.upsert_account(account).await;
+                                        tracing::info!("✅ 已成功自动纠正并恢复账号 {} 的活跃状态", aid);
+                                    }
+                                }
                             }
                         }
                     }
-                } else {
+                }
+ else {
                     tracing::warn!("⚠️ loadCodeAssist 响应中未包含有效订阅等级信息");
                 }
             } else {

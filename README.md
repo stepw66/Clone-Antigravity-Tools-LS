@@ -246,11 +246,12 @@ The Model Alias forwarding feature has not yet been achieved. An exact Model ID 
 - **[Protocol] Native Gemini Client Integration**: Engineered support for `x-goog-api-key` headers and automatically intercepts/strips operation suffixes (e.g., `:streamGenerateContent`) from model paths at the gateway, unlocking drop-in compatibility for official Gemini ecosystem tools.
 - **[Engine] Aligned LS Core Launch Signatures**: Adopted security adaptations targeting recent Antigravity native engines, transitioning to `-https_server_port` and injecting mandatory bidirectional CSRF tokens for Cascade agents to eradicate strict connection-reset issues.
 - **[Session] Zero-IO Identity Tracking**: Deprecated high-frequency disk-reads of local `.gemini` authorization files during identity evaluations, swapped to rapid memory-bound MD5 fingerprint checks, mitigating heavy file operations and concurrency contention.
+- **[Port Config] Full-Link Custom Backend Port**: Eliminated all hardcoded `5173` port references. Now supports configuring the backend port via CLI, env vars, or directly in the **Dashboard Settings page**, with automatic adaptation for Tauri bridging and OAuth flows.
+- **[Accounts] Account Status Misjudgment Fix (Issue #13)**: Optimized the Google subscription tier recognition algorithm, resolving the issue where normal free accounts were incorrectly flagged as "Restricted/Banned," and added support for automatic status recovery.
 
 ### v0.0.2 - Containerization & Dependency Optimization (2026-03-25)
 - **[Docker] Runtime Self-Healing**: Resolved startup crashes in `debian:bookworm-slim` by adding minimal required libraries for `ls_core` (`libnss3`, `libgbm1`, etc.).
 - **[Core] Decoupled GUI Dependencies**: Refactored `rfd` (file dialog) as an optional feature. Docker builds now automatically exclude GTK/Wayland links, maintaining a minimal image size.
-- **[Port Config] Runtime Port Override**: The backend, Tauri desktop bridge, Vite proxy, OAuth flow, SSE subscriptions, and integration docs now all follow the configured backend port instead of hardcoding `5173`.
 - **[API] Environment-Aware Fallback**: Optimized path selection APIs to return user-friendly errors in headless environments instead of crashing.
 
 ### v0.0.1 (Experimental) - Initial Core Features Release
